@@ -69,6 +69,16 @@ Report back to Flexx with:
 - Test results
 - Any edge cases not covered
 
+Then trigger review on the branch:
+
+```bash
+hermes chat -q "Review the branch 'task/<slug>'. Load the flexx-review skill, audit the branch against its spec, and post the verdict." &
+```
+
+This fires review as a background one-shot. Do not wait for it to finish. The verdict will be delivered to chat when review completes.
+
+If `hermes` is not available (non-Hermes agent system), skip this step and tell Flexx to run review manually.
+
 ## 7. Done
 
 Mark the task `status: built` in frontmatter. Append `[BUILT <commit-hash> <ISO date>]` to the end of the task file. End the pass.
