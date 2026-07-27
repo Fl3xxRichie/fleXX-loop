@@ -56,14 +56,15 @@ Once the test passes, stop. No filler questions.
 
 Use exactly this shape in the output:
 
-```
+```yaml
 ---
 slug: <kebab-case-slug>
 status: draft
 depends_on: []
 created: <ISO date>
+claimed_at: <set by build agent when locking>
 ---
-
+```
 ## Problem
 [One or two sentences on what user/business problem this solves]
 

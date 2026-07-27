@@ -17,7 +17,7 @@ Check git for branches that have been pushed but not yet merged:
 
 ```bash
 git fetch origin
-git branch -r | grep -v "HEAD" | grep -v "main\|master" | sed 's|origin/||'
+git branch -r | grep -v "HEAD" | grep -vE "^origin/(main|master)$" | sed 's|origin/||'
 ```
 
 Or review the most recent commit Flexx asked about.
@@ -71,8 +71,8 @@ Review of <branch/commit>
 - [SCOPE-CREEP] — Changes beyond the ACs that should be reverted or moved to a separate task
 
 ## 3. Safe to merge
-Yes — review evidence is complete. Flexx makes the final merge decision.
-| No — issues in section 1 must be resolved first.
+Yes - review evidence is complete. Flexx makes the final merge decision.
+No - issues in section 1 must be resolved first.
 ```
 
 ## 5. Checking scope
