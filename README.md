@@ -26,6 +26,8 @@ slug: <kebab-case-slug>
 status: draft | agent-ready | in-progress | built | blocked | merged
 depends_on: []
 created: <ISO date>
+claimed_at: <set by build agent when locking>
+priority: normal | high | low
 ---
 ```
 

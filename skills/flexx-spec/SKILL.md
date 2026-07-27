@@ -63,6 +63,7 @@ status: draft
 depends_on: []
 created: <ISO date>
 claimed_at: <set by build agent when locking>
+priority: normal
 ---
 ```
 ## Problem
@@ -110,3 +111,13 @@ Also save as a TODO for the current session.
 - Never start building during the spec interview.
 - Never guess product decisions - ask.
 - Output the final spec in a copyable code block so Flexx can paste it into Linear/GitHub issues.
+
+## 6. Answering a blocked question
+
+When a task is `status: blocked` and Flexx answers the question in chat:
+
+1. Append a `## Resolution` section to the task file with Flexx's answer.
+2. Flip `status` back to `agent-ready`.
+3. Tell Flexx the task is back in the queue.
+
+This is manual and explicit. The agent does not infer intent from casual chat replies. Flexx must clearly answer the blocked question before the agent reactivates the task.

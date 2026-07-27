@@ -19,9 +19,14 @@ Before changing any repo or file:
 
 Read all files in `.hermes/tasks/` or `~/.hermes/tasks/`. Tasks are `.md` files with YAML frontmatter and AC-N acceptance criteria.
 
-Tasks are picked in this order of priority:
+Tasks are picked in this order:
 1. Tasks with `status: agent-ready` in frontmatter (or the text "AGENT-READY" in content)
 2. Tasks that Flexx explicitly said "do this" in the current conversation
+
+Among agent-ready tasks, sort by:
+1. `priority` field descending: `high` > `normal` > `low` (default `normal` if absent)
+2. `created` date ascending (oldest first) within the same priority
+3. Alphabetical slug order as final tiebreak (deterministic, no randomness)
 
 **Skip tasks where:**
 - `status: in-progress` - another build pass already claimed it (check for stale in-progress below)
@@ -34,12 +39,12 @@ Tasks are picked in this order of priority:
 - If `claimed_at` is older than 30 minutes AND no matching `task/<slug>` branch exists on origin, the agent crashed. Mark it back to `status: agent-ready` and pick it up.
 - If `claimed_at` is older than 30 minutes AND the branch DOES exist, the agent finished building but didn't mark `built`. Check if the branch is pushed and reviewable. If so, mark `status: built` and trigger review. If not, mark `status: agent-ready` and pick it up.
 
-If no `agent-ready` tasks exist, check for `blocked` tasks. If any exist, report the count and list them so they don't silently rot:
+If no `agent-ready` tasks exist, check for `blocked` tasks. If any exist, report the count and list them with the actual blocked question so Flexx sees what needs answering:
 
 ```
 No agent-ready tasks found. 2 task(s) waiting on you:
-- <slug>: <blocked question summary>
-- <slug>: <blocked question summary>
+- <slug>: [BLOCKED <date>] <full question text from task file>
+- <slug>: [BLOCKED <date>] <full question text from task file>
 ```
 
 Then end the pass. Do not invent work.
@@ -116,3 +121,4 @@ If running under cron, deliver the blocked question to Flexx via the cron delive
 - Never merge. Never enable auto-merge. Only Flexx touches the merge button.
 - One task per pass always.
 - If you need Flexx to make a decision, stop. Never guess.
+- Reactivating a blocked task is manual. Flexx (or a spec-loop follow-up) must flip `status` back to `agent-ready` himself. Never auto-flip blocked tasks based on chat replies.
