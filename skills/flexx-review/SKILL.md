@@ -79,9 +79,20 @@ No - issues in section 1 must be resolved first.
 
 Non-goals are binding. If a finding requires behavior excluded by an NG-N, record it as `[SCOPE-CONFLICT]` and DO NOT prescribe a fix. Flexx must resolve the contradiction.
 
+## 6. Post-verdict merge button
+
+After posting the verdict, if section 3 says "Safe to merge: Yes", use the `clarify` tool:
+
+- question: "Review complete. Safe to merge. Merge the branch?"
+- choices: ["Merge", "Hold"]
+
+If "Merge": merge the branch to the default branch using `gh pr merge --merge` (or `git merge` if no PR exists). Mark the task `status: merged` in frontmatter. Append `[MERGED <ISO date>]` to the task file. Commit and push the task file change.
+
+If "Hold" or section 3 says "Safe to merge: No": end. Flexx merges later when ready.
+
 ## Hard rules
 
-- Never merge or push commits.
+- Only merge after Flexx explicitly clicks the "Merge" button in the clarify call AND section 3 says "Safe to merge: Yes". Never merge on your own.
 - Never approve through formal GitHub review buttons.
 - Never change the AC-N or NG-N IDs in the original spec.
 - Review against the contract, not your personal preference.

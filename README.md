@@ -62,13 +62,15 @@ skill_manage(action='create', name='flexx-review', content=<SKILL.md content>, c
 
 ## How to use
 
-### Manual
+### Manual (with buttons)
 
-1. Tell your agent "spec this" and describe your idea -> agent interviews you, drafts the spec, you confirm, it files the task
-2. Mark the task `status: agent-ready` in frontmatter
-3. Tell your agent "work the queue" -> agent picks the task, builds it, pushes a branch
-4. Tell your agent "review this" -> agent audits the branch, posts the verdict
-5. You merge
+1. Tell your agent "spec this" and describe your idea -> agent interviews you, drafts the spec
+2. Agent shows a **Mark Agent Ready** button -> you click it, agent files the task as `agent-ready`
+3. Agent shows a **Work Queue** button (if no git hook) -> you click it, build starts
+4. Build implements, pushes branch, **auto-fires review** (no button needed)
+5. Review audits, posts verdict, shows a **Merge** button (if safe to merge) -> you click it, branch merges
+
+You never edit frontmatter or type commands. The buttons are `clarify` tool calls that work on every surface (desktop, CLI, Telegram, Discord).
 
 ### Event-driven (git hooks, fully local, no VPS)
 

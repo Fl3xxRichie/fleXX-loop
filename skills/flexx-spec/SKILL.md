@@ -95,7 +95,14 @@ Rules for the draft:
 
 ## 4. Confirm
 
-Show the draft in chat and get Flexx's go-ahead. Wait for confirmation before writing anything to disk.
+Show the draft in chat. Then use the `clarify` tool to get Flexx's decision:
+
+- question: "Spec draft ready. Mark as agent-ready for the build loop?"
+- choices: ["Mark Agent Ready", "Needs changes"]
+
+If "Needs changes": ask what to fix, revise, and re-present the clarify button. Loop until "Mark Agent Ready" or Flexx abandons.
+
+If "Mark Agent Ready": proceed to step 5.
 
 ## 5. Write to disk
 
@@ -105,9 +112,22 @@ For generic/non-project tasks, write to `~/.hermes/tasks/<slug>.md`.
 
 Also save as a TODO for the current session.
 
+## 6. Queue for build
+
+After writing the file, flip `status` from `draft` to `agent-ready` in the frontmatter (Flexx already confirmed via the button). Commit with message `ready: <slug>` and push.
+
+If the git post-commit hook is installed (see README), build fires automatically. If not, use the `clarify` tool:
+
+- question: "Task queued. Trigger build now?"
+- choices: ["Work Queue", "Done for now"]
+
+If "Work Queue": run the build agent via `hermes chat -q` with the build prompt (see flexx-build skill step 7).
+
+If "Done for now": end. Flexx can say "work the queue" later.
+
 ## Hard rules
 
-- Never apply the "agent-ready" label. Only Flexx decides when something is ready for the build loop.
+- Only flip to `agent-ready` after Flexx explicitly clicks the "Mark Agent Ready" button in the clarify call. Never auto-flip.
 - Never start building during the spec interview.
 - Never guess product decisions - ask.
 - Output the final spec in a copyable code block so Flexx can paste it into Linear/GitHub issues.
