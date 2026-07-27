@@ -44,6 +44,8 @@ Get the full diff against the default branch. Read every changed file in context
 - Refactors, renames, or cleanups not required by any AC
 - Dependency changes not required by any AC
 
+**Discovery surface check:** If the task adds content that users should discover (tutorial, blog post, product page, etc.), verify it appears on the discovery surface (homepage, listing page, search index). If the discovery surface is hardcoded and was not updated, flag it as `[AC-N]` - the feature is not fully accessible to users even if the URL works.
+
 **Run tests:** Check out the branch and run the project's test suite, lint, and typecheck. Record pass/fail counts. If tests fail, that is a `[DEFECT]` finding in section 1. If the project has no test suite, note it but do not block merge unless the change is high-risk.
 
 ## 4. Post the verdict

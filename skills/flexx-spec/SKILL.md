@@ -21,6 +21,15 @@ Read the relevant code first. Find which files are involved, what patterns alrea
 
 If the idea touches a project like BotWall, pithos, or prxyauth, cd into that repo and read the relevant files silently. Only surface findings if they constrain a product decision.
 
+**Trace the full surface.** Before finalizing the relevant files list, trace every path the user takes to see this feature:
+
+1. Where does the data live? (dict, db, config file)
+2. What renders it? (route, template, component)
+3. Where does the user discover it? (homepage card, nav link, search index, sitemap)
+4. Is discovery dynamic (loops over a dict/query) or hardcoded (manual HTML entries)?
+
+If any discovery surface is hardcoded, add it to the relevant files list. A feature that works at its URL but does not appear on the homepage is incomplete.
+
 ## 2. Interview in rounds
 
 Ask 1-4 questions per round, each with concrete options. Every question gets your recommended answer listed first. Examples:
