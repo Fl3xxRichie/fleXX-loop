@@ -63,7 +63,7 @@ Before touching any code, make the lock visible to other agents:
 
 This is the lock. Any other agent that fetches after this point will see `status: in-progress` and skip the task. The window where two agents can both claim is now the gap between "read agent-ready" and "push lock commit" which is seconds, not hours.
 
-If the push fails because origin moved (another agent locked a different task), pull and retry. If it fails because another agent already pushed `in-progress` for THIS task, they won the race. Stop and end the pass.
+If the push fails because origin moved (another agent locked a different task), fetch and rebase on the default branch, then retry the push. Use `git pull --rebase` (not merge) so there's no conflict resolution needed - the lock commit only touches one task file, so the rebase is clean. If it fails because another agent already pushed `in-progress` for THIS task, they won the race. Stop and end the pass.
 
 ## 4. Build
 
