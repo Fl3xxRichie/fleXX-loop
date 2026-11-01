@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# fleXX-loop post-commit: dispatch the build one-shot when a task becomes agent-ready.
+#
+# Design rules (each one exists because the v1 hook broke on it):
+#   * never fail or block the commit      -> every path ends in exit 0
+#   * never recurse                       -> FLEXX_LOOP_ACTIVE guard + atomic mkdir lock
+#   * works on root commits, merges, amends -> git diff-tree, not HEAD~1
+#   * only fires on a draft -> agent-ready TRANSITION (plus optional queue drain)
+#   * fires detached, with a pinned provider, and logs to $GIT_DIR/flexx-loop.log
+#
+# Env: FLEXX_LOOP_ACTIVE=1 suppresses dispatch (set by the dispatcher for its child).
+#      FLEXX_LOOP_DRAIN=0 restricts dispatch to the task committed right now.
+#      FLEXX_LOOP_SKIP=1 disables the hook entirely.
+# Config: .hermes/loop.conf in the repo (FLEXX_LOOP_PROVIDER / FLEXX_LOOP_MODEL / ...).
+
+set -u
+
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+. "$HOOK_DIR/_lib.sh"
+
+[ "${FLEXX_LOOP_SKIP:-0}" = "1" ] && exit 0
+[ "${FLEXX_LOOP_ACTIVE:-0}" = "1" ] && exit 0
+
+ROOT="$(fxl_root)" || exit 0
+cd "$ROOT" || exit 0
+GITDIR="$(fxl_git_dir)" || exit 0
+
+fxl_load_conf
+TASKS_REL="$(fxl_tasks_rel)"
+
+ranks() { # priority -> sort rank
+  case "$1" in
+    high) echo 3 ;;
+    low) echo 1 ;;
+    *) echo 2 ;;
+  esac
+}
+
+# Highest priority first, then oldest, then filename. Reads file paths on stdin.
+pick_by_rank() {
+  local f pr cr
+  while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    pr="$(fxl_field priority <"$f")"
+    [ -n "$pr" ] || pr=normal
+    cr="$(fxl_field created <"$f")"
+    printf '%s\t%s\t%s\n' "$(ranks "$pr")" "$cr" "$f"
+  done | sort -k1,1nr -k2,2 -k3,3 | head -1 | cut -f3
+}
+
+# ---------- 1. which tasks just became agent-ready ----------
+CHANGED="$(git diff-tree --no-commit-id --name-only -r -m HEAD 2>/dev/null || true)"
+TRANSITIONED=""
+
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  case "$f" in "${TASKS_REL}"/*.md) ;; *) continue ;; esac
+  head_status="$(git show "HEAD:$f" 2>/dev/null | fxl_status)"
+  [ "$head_status" = "agent-ready" ] || continue
+  prev_status="$(git show "HEAD^:$f" 2>/dev/null | fxl_status)"
+  [ "$prev_status" = "agent-ready" ] && continue
+  TRANSITIONED="$TRANSITIONED$f
+"
+  fxl_log "post-commit: transition draft->agent-ready detected in $f"
+done <<EOF
+$CHANGED
+EOF
+
+PICK="$(printf '%s' "$TRANSITIONED" | pick_by_rank)"
+[ -n "$PICK" ] && fxl_log "post-commit: picked $PICK among $(printf '%s' "$TRANSITIONED" | grep -c .) task(s) that just went ready"
+
+# ---------- 2. optional drain: any ready task, best priority first ----------
+if [ -z "$PICK" ] && [ "${FLEXX_LOOP_DRAIN}" = "1" ] && [ -d "$TASKS_REL" ]; then
+  READY=""
+  for f in "$TASKS_REL"/*.md; do
+    [ -f "$f" ] || continue
+    [ "$(fxl_status <"$f")" = "agent-ready" ] || continue
+    READY="$READY$f
+"
+  done
+  PICK="$(printf '%s' "$READY" | pick_by_rank)"
+  [ -n "$PICK" ] && fxl_log "post-commit: drain picked $PICK"
+fi
+
+[ -n "$PICK" ] || exit 0
+
+SLUG="$(fxl_field slug <"$PICK")"
+[ -n "$SLUG" ] || SLUG="$(basename "$PICK" .md)"
+
+# ---------- 3. single-flight lock (atomic mkdir) ----------
+LOCK="$GITDIR/flexx-loop.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+  OLD_PID="$(cat "$LOCK/pid" 2>/dev/null || echo 0)"
+  if [ -n "$OLD_PID" ] && [ "$OLD_PID" != "0" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+    fxl_log "post-commit: dispatch already running (pid $OLD_PID), skipping $SLUG"
+    exit 0
+  fi
+  # Dead child, or a lock stolen mid-write: age gate keeps us from racing a live writer.
+  LOCK_AGE=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || date +%s) ))
+  if [ "$LOCK_AGE" -lt 5 ]; then
+    fxl_log "post-commit: fresh lock, assuming a live writer, skipping $SLUG"
+    exit 0
+  fi
+  fxl_log "post-commit: reaping stale lock (age ${LOCK_AGE}s, pid ${OLD_PID})"
+  rm -rf "$LOCK"
+  mkdir "$LOCK" 2>/dev/null || exit 0
+fi
+printf '%s\n' "$$" >"$LOCK/pid" 2>/dev/null || true
+
+# ---------- 4. dispatch ----------
+if ! HERMES_BIN="$(fxl_hermes)"; then
+  fxl_log "post-commit: hermes not on PATH; task $SLUG stays queued"
+  rmdir "$LOCK" 2>/dev/null || rm -rf "$LOCK"
+  exit 0
+fi
+
+PROMPT="Work the queue. Task '$SLUG' is agent-ready (committed $(date -u +%Y-%m-%dT%H:%MZ)). Load the flexx-build skill, claim it, implement every AC, push the branch task/$SLUG, then fire review per step 7. One task per pass."
+ARGS=(-q "$PROMPT" -Q)
+[ -n "${FLEXX_LOOP_PROVIDER}" ] && ARGS+=(--provider "$FLEXX_LOOP_PROVIDER")
+[ -n "${FLEXX_LOOP_MODEL}" ] && ARGS+=(-m "$FLEXX_LOOP_MODEL")
+
+fxl_log "post-commit: dispatching build for $SLUG via $HERMES_BIN"
+
+(
+  export FLEXX_LOOP_ACTIVE=1
+  "$HERMES_BIN" "${ARGS[@]}" >>"$GITDIR/flexx-loop.log" 2>&1
+  rc=$?
+  fxl_log "post-commit: build for $SLUG exited $rc"
+  rm -rf "$LOCK"
+) &
+CHILD_PID=$!
+# The hook's own $$ dies the moment it exits; the child is the process that must
+# hold the single-flight lock.
+printf '%s\n' "$CHILD_PID" >"$LOCK/pid" 2>/dev/null || true
+disown 2>/dev/null || true
+
+exit 0

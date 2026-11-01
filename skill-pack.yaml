@@ -1,5 +1,32 @@
 name: fleXX-loop
-description: Three-skill dev loop (spec, build, review) for Hermes Agent
-version: 1.0.0
+description: Three-skill dev loop (spec, build, review) for Hermes Agent, with an enforceable task contract
+version: 1.1.0
 author: FL3XX
 license: MIT
+
+skills:
+  - name: flexx-spec
+    path: skills/flexx-spec
+    trigger: spec this, plan this feature, write the issue for, draft the task
+  - name: flexx-build
+    path: skills/flexx-build
+    trigger: work the queue, build the next task, implement the spec
+  - name: flexx-review
+    path: skills/flexx-review
+    trigger: review this branch, check the build, audit the PR
+
+assets:
+  references:
+    - skills/flexx-build/references/local-first-dev-infra.md
+    - skills/flexx-build/references/unattended-run-mechanics.md
+  scripts:
+    - skills/flexx-build/scripts/watch-agent.sh
+    - skills/flexx-review/scripts/cdp-geometry-probe.mjs
+
+tooling:
+  install: scripts/install.sh
+  hooks: scripts/setup-hooks.sh
+  lint: scripts/loop-lint.py
+  closeout: scripts/mark-merged.sh
+
+states: [draft, agent-ready, in-progress, built, blocked, merged]

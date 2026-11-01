@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Hook integration test
+        run: bash tests/hook-smoke.sh
+
+      - name: Shell syntax
+        run: |
+          for f in scripts/*.sh git-hooks/_lib.sh git-hooks/pre-commit git-hooks/post-commit tests/*.sh; do
+            bash -n "$f" || exit 1
+          done
+
+      - name: Skill frontmatter and asset references
+        run: python -m unittest tests.test_loop_lint.BundledSkillCase -v
+
+      - name: Manifest version matches the skill pack
+        run: |
+          python - <<'PY'
+          import re, pathlib, sys
+          pack = pathlib.Path("skill-pack.yaml").read_text()
+          version = re.search(r"^version:\s*(\S+)", pack, re.M).group(1)
+          changelog = pathlib.Path("CHANGELOG.md").read_text()
+          if f"## {version}" not in changelog:
+              sys.exit(f"skill-pack.yaml version {version} has no CHANGELOG entry")
+          print("version", version, "ok")
+          PY

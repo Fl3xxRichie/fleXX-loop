@@ -1,125 +1,157 @@
 # fleXX-loop
 
-A three-skill dev loop for Hermes Agent: **spec -> build -> review**.
+A three-skill dev loop for Hermes Agent: **spec → build → review**, with a contract a machine can enforce.
 
-Each skill is a self-contained SKILL.md that plugs into Hermes Agent's skill system. Together they form an autonomous development loop where:
+Each skill is a self-contained `SKILL.md`. Together they take a raw idea to a merged branch while you stay the only one who can merge.
 
-1. **flexx-spec** interviews you about a raw idea until the spec is unambiguous, then files a build-ready task
-2. **flexx-build** picks up the next ready task, implements every acceptance criterion, pushes a branch
-3. **flexx-review** audits the branch against its spec, posts a structured verdict
+```
+idea ──spec──> task (draft) ──you──> agent-ready ──hook──> build ──> branch task/<slug>
+                                                                        │
+                                              review <─────────────────┘
+                                                │
+                                    "safe to merge" ──you merge──> mark-merged.sh
+```
 
-You stay the gatekeeper. No skill ever merges.
+## Why v1.1 exists
 
-## The contract system
+v1.0 shipped three prose files and a hook that fired on `HEAD~1`. In real use that hook rebuilt
+the same task after its own lock commit, blocked `git commit` for the length of a build, and
+died silently when the provider had no credit. The skills also drifted away from the copies
+actually running on the machine that uses them, so the repo advertised behavior the running
+skills forbid (review merging, spec self-promoting to `agent-ready`).
 
-Every task has:
-- **AC-N** (Acceptance Criteria) - observable, testable outcomes
-- **NG-N** (Non-goals) - what must NOT change
+v1.1 makes the repo the source of truth and moves the guarantees out of prose:
 
-These IDs flow through all three skills. Spec writes them, build implements them, review checks them. Once filed, IDs never change.
+| Guarantee | How it is enforced now |
+|---|---|
+| A task file is well formed | `scripts/loop-lint.py`, wired into `pre-commit` |
+| One build per pass | atomic `mkdir` lock in `$GIT_DIR/flexx-loop.lock`, child pid recorded |
+| The build never recurses | `FLEXX_LOOP_ACTIVE=1` exported to the child, checked by the hook |
+| Commits never wait on a build | dispatch is detached (`&` + `disown`), logged |
+| A merge is real before it is recorded | `scripts/mark-merged.sh` proves ancestry first |
+| Installed skills match the repo | `scripts/install.sh --check` diffs them |
 
-## Task schema
+## Install
+
+```bash
+# skills -> the skill root THIS machine actually reads
+bash scripts/install.sh              # backs up each replaced skill dir as <name>.bak-<ts>
+bash scripts/install.sh --dry-run    # show what would change
+bash scripts/install.sh --check      # exit 1 when the installed copy differs from the repo
+```
+
+Resolution order: `$HERMES_HOME/skills`, `%LOCALAPPDATA%/hermes/skills`,
+`~/AppData/Local/hermes/skills`, `~/.hermes/skills`. (`~/.hermes/skills` is not the active root
+on every Hermes install — that is why the old README's `cp -r` silently installed nothing.)
+
+Hooks, per repo that uses the loop:
+
+```bash
+bash scripts/setup-hooks.sh /path/to/repo
+bash scripts/setup-hooks.sh /path/to/repo --uninstall
+```
+
+## The contract
 
 ```yaml
 ---
-slug: <kebab-case-slug>
-status: draft | agent-ready | in-progress | built | blocked | merged
-depends_on: []
-created: <ISO date>
-claimed_at: <set by build agent when locking>
-priority: normal | high | low
+slug: <kebab-case>            # must equal the filename
+status: draft                 # draft | agent-ready | in-progress | built | blocked | merged
+depends_on: []                # slugs that must be MERGED before this builds
+created: 2026-11-02
+claimed_at: <set by build when locking>
+priority: normal              # high | normal | low
 ---
 ```
 
-## Task states
+Body sections, all required: `## Problem`, `## Acceptance Criteria`, `## Non-goals`,
+`## Relevant files`, `## How to verify`.
 
-| State | Meaning |
+- **AC-N** — observable outcome. Sequential from 1, never renumbered.
+- **NG-N** — binding non-goal. An AC may not reference one; lint fails if it does.
+
+## State machine
+
+| State | Written by | Meaning |
+|---|---|---|
+| `draft` | spec agent | written, not approved |
+| `agent-ready` | you (a tap, or editing frontmatter) | queued |
+| `in-progress` | build, as the lock commit | claimed |
+| `built` | build, with `[BUILT <sha> <date>]` | branch pushed |
+| `blocked` | build, with `[BLOCKED <date>]` + one question | needs you |
+| `merged` | `scripts/mark-merged.sh` only | on the default branch |
+
+`mark-merged.sh` refuses to write `merged` unless the branch tip (or the `[BUILT]` commit, if
+the branch was deleted) is an ancestor of the default branch. Squash merges break ancestry by
+design and are reported, not recorded.
+
+## Hooks
+
+`pre-commit` lints staged task files and blocks on contract errors. It fails **open** on
+infrastructure problems (no working python, unreadable temp dir) so a broken interpreter never
+blocks your commits. Escapes: `git commit --no-verify`, `FLEXX_LOOP_SKIP=1`.
+
+`post-commit` dispatches a build when a task **transitions** into `agent-ready` (root commits,
+merge commits and amends included — it uses `git diff-tree`, not `HEAD~1`). With
+`FLEXX_LOOP_DRAIN=1` it also picks any ready task left in the queue, highest priority first,
+oldest second, filename last.
+
+Every decision lands in `$GIT_DIR/flexx-loop.log`. If nothing fires, read that file first.
+
+| Env | Effect |
 |---|---|
-| `draft` | Spec written, not yet approved for build |
-| `agent-ready` | Flexx marked it ready for the build loop |
-| `in-progress` | Build agent claimed it (lock) |
-| `built` | Build pushed the branch, awaiting review/merge |
-| `blocked` | Build hit an ambiguity, waiting on Flexx |
-| `merged` | Merged to default branch |
+| `FLEXX_LOOP_ACTIVE=1` | suppress dispatch (set automatically for the child) |
+| `FLEXX_LOOP_SKIP=1` | disable hooks entirely |
+| `FLEXX_LOOP_DRAIN` | `1` = build any ready task, `0` = only the one just committed |
+| `FLEXX_LOOP_PROVIDER` / `FLEXX_LOOP_MODEL` | pin the one-shot; an unpinned provider that is out of credit dies in seconds with no verdict |
+| `FLEXX_LOOP_TASKS` | tasks dir, default `.hermes/tasks` |
+| `FLEXX_LOOP_STALE` | seconds before a lock with a dead pid is reaped |
 
-## Installation
+Repo config lives in `.hermes/loop.conf` (written once by `setup-hooks.sh`, never overwritten).
 
-Copy the three skill directories into your Hermes skills folder:
-
-```bash
-cp -r skills/flexx-spec ~/.hermes/skills/software-development/
-cp -r skills/flexx-build ~/.hermes/skills/software-development/
-cp -r skills/flexx-review ~/.hermes/skills/software-development/
-```
-
-Or install via the Hermes skill management tool:
-
-```
-skill_manage(action='create', name='flexx-spec', content=<SKILL.md content>, category='software-development')
-skill_manage(action='create', name='flexx-build', content=<SKILL.md content>, category='software-development')
-skill_manage(action='create', name='flexx-review', content=<SKILL.md content>, category='software-development')
-```
-
-## How to use
-
-### Manual (with buttons)
-
-1. Tell your agent "spec this" and describe your idea -> agent interviews you, drafts the spec
-2. Agent shows a **Mark Agent Ready** button -> you click it, agent files the task as `agent-ready`
-3. Agent shows a **Work Queue** button (if no git hook) -> you click it, build starts
-4. Build implements, pushes branch, **auto-fires review** (no button needed)
-5. Review audits, posts verdict, shows a **Merge** button (if safe to merge) -> you click it, branch merges
-
-You never edit frontmatter or type commands. The buttons are `clarify` tool calls that work on every surface (desktop, CLI, Telegram, Discord).
-
-### Event-driven (git hooks, fully local, no VPS)
-
-The loop can run fully autonomously on your local machine using git hooks. No VPS, no gateway, no network dependency.
-
-**Setup:**
+## Lint
 
 ```bash
-# Install hooks into any repo where you use fleXX-loop
-bash scripts/setup-hooks.sh /path/to/your/repo
+python3 scripts/loop-lint.py .hermes/tasks
+python3 scripts/loop-lint.py .hermes/tasks --json --strict
 ```
 
-This installs a `post-commit` hook that detects when a task file flips to `status: agent-ready` and automatically triggers the build agent via `hermes chat -q`.
+| Code | Meaning |
+|---|---|
+| E001–E004 | frontmatter / slug shape (filename match, kebab-case) |
+| E005–E007 | status enum, ISO `created`, priority enum |
+| E008 / W001 | `claimed_at` required by `in-progress` / stale on other states |
+| E009–E010, W002 | `depends_on` shape, self-dependency, cycles, unresolved dep |
+| E020–E024 | missing section, no ACs, non-sequential ids, AC referencing an NG |
+| E030–E032 | state markers missing; blocked task reactivated without `## Resolution` |
+| W003–W007 | placeholders in ACs, checkbox-less criteria, duplicate `[BUILT]`, blocked without a question |
 
-After build pushes the branch, it automatically fires review as a background one-shot.
+Exit 1 on errors, 2 on usage/infra, 0 clean. `--strict` also fails on warnings.
 
-**Flow:**
+## Tests
 
+```bash
+python -m unittest discover -s tests -v   # 24 unit tests, stdlib only
+bash tests/hook-smoke.sh                  # 19 assertions against a throwaway repo + stub hermes
 ```
-You commit task with status: agent-ready
-    ↓ (post-commit hook fires instantly)
-hermes chat -q triggers flexx-build
-    ↓ (build implements, pushes branch)
-hermes chat -q triggers flexx-review
-    ↓ (review audits, posts verdict to chat)
-You see the verdict, you merge
-```
 
-You never type "work the queue" or "review this". The loop is reactive.
+`hook-smoke.sh` never calls the real `hermes`: it puts a stub on `PATH` and asserts dispatch,
+recursion guarding, single-flight locking, stale-lock recovery, priority drain and the lint gate.
 
-### Cron (polling, for unattended machines)
+## Design rules
 
-Set up two cron jobs (spec is interactive only, never cron):
-- **Build**: runs every N hours, picks the next `agent-ready` task, builds it, reports back
-- **Review**: runs after build, reviews unmerged branches, posts verdicts
-
-## Design principles
-
-- **Human is the merge button.** No skill ever merges or enables auto-merge.
-- **Contract first.** AC-N and NG-N IDs are immutable once filed.
-- **One task per pass.** Each cron run does one thing and exits.
-- **Never guess.** If something is ambiguous, the skill blocks and asks.
-- **Scope is binding.** Build only touches ACs. Review flags anything beyond them.
+- **Only you merge.** Review prints the command; it never runs it. `mark-merged.sh` only records a merge that already happened.
+- **One task per pass.** The lock is what makes that true across processes, not good intentions.
+- **Contract first.** AC/NG ids are immutable once filed; lint is what keeps them honest.
+- **Never guess.** Ambiguity blocks the task with one answerable question.
+- **The repo is the source of truth.** `install.sh --check` is the drift alarm; the running skills are not a scratchpad.
 
 ## Requirements
 
-- Hermes Agent (or any agent system that supports SKILL.md skills)
-- Git
-- `gh` CLI (optional, for branch detection)
+- Hermes Agent (or any agent system that reads `SKILL.md`)
+- Git, bash (git-bash on Windows is fine)
+- Python 3.8+ for the linter (hooks fail open without it)
+- `gh` optional
 
 ## License
 

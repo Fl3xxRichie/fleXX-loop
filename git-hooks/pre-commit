@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# fleXX-loop pre-commit: lint staged task files before they land.
+# Blocks the commit on contract errors. Escapes: FLEXX_LOOP_SKIP=1 or git commit --no-verify.
+
+set -u
+
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+. "$HOOK_DIR/_lib.sh"
+
+[ "${FLEXX_LOOP_SKIP:-0}" = "1" ] && exit 0
+
+ROOT="$(fxl_root)" || exit 0
+cd "$ROOT" || exit 0
+GITDIR="$(fxl_git_dir)" || exit 0
+
+TASKS_REL="$(fxl_tasks_rel)"
+STAGED="$(git diff --cached --name-only --diff-filter=ACM | grep -E "^${TASKS_REL}/.*\.md$" || true)"
+[ -z "$STAGED" ] && exit 0
+
+PY="$(fxl_python)" || { fxl_log "pre-commit: no working python on PATH, skipping task lint"; exit 0; }
+LINT=""
+for candidate in "$GITDIR/flexx-loop-lint.py" "$ROOT/scripts/loop-lint.py" "$HOOK_DIR/loop-lint.py"; do
+  [ -f "$candidate" ] && LINT="$candidate" && break
+done
+[ -n "$LINT" ] || { fxl_log "pre-commit: loop-lint.py not found, skipping task lint"; exit 0; }
+
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/flexx-lint.XXXXXX")" || exit 0
+trap 'rm -rf "$TMP"' EXIT
+
+# python here is a native Windows binary: it cannot resolve MSYS paths like /tmp/x.
+TMP_ARG="$TMP"
+if command -v cygpath >/dev/null 2>&1; then
+  TMP_ARG="$(cygpath -m "$TMP")"
+fi
+
+# Context: every task on disk, then the staged blobs on top of it.
+if [ -d "$TASKS_REL" ]; then
+  for f in "$TASKS_REL"/*.md; do
+    [ -f "$f" ] && cp "$f" "$TMP/" 2>/dev/null
+  done
+fi
+for f in $STAGED; do
+  base="$(basename "$f")"
+  if git cat-file -e ":$f" 2>/dev/null; then
+    git show ":$f" >"$TMP/$base" || rm -f "$TMP/$base"
+  fi
+done
+
+OUT="$("$PY" "$LINT" "$TMP_ARG" 2>&1)"
+RC=$?
+if [ "$RC" -eq 2 ]; then
+  # Infra failure (bad interpreter, unreadable temp dir), not a contract violation.
+  fxl_log "pre-commit: lint could not run (rc=2), not blocking: $(echo "$OUT" | head -1)"
+  exit 0
+fi
+if [ "$RC" -ne 0 ]; then
+  echo ""
+  echo "fleXX-loop: task contract violations block this commit"
+  echo "$OUT" | sed "s|$TMP/|$TASKS_REL/|g"
+  echo ""
+  echo "Fix the task file, or bypass with: git commit --no-verify   (FLEXX_LOOP_SKIP=1 also works)"
+  fxl_log "pre-commit: blocked commit, lint rc=$RC"
+  exit 1
+fi
+
+fxl_log "pre-commit: lint clean ($(echo "$STAGED" | wc -l | tr -d ' ') task file(s))"
+exit 0

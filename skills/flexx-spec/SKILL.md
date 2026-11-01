@@ -11,6 +11,34 @@ Turns a raw idea into a task so complete that a build agent needs nothing beyond
 
 Flexx says "spec this," "plan this feature," "write the issue for," "draft the task," or describes an idea he wants built. Also use when he asks "how would this work" about something that needs implementation.
 
+## 0. Viability memo when the ask is "should we add X"
+
+Not every business idea is a spec request. "Should we add a marketplace", "what do we
+need for this", "how do we benefit", "research this" is a decision memo, and the
+deliverable is a doc plus phased draft specs, not code.
+
+Order, and it matters:
+
+1. Verdict in the first lines, then the mechanism in plain language (which app changes,
+   which one stays untouched).
+2. Competitor mechanics from the operator's OWN docs (a vendor hub, a pricing page, an
+   API doc), never blog summaries. Secondary sources conflict on fees, payout cycles and
+   KYC, so label any blog number as unverified and quote the primary page.
+3. The project's own numbers: existing margin bands, payment fee caps, real order values,
+   current catalog size. Compute per-order contribution after fees and tax, and state the
+   honest comparison to the existing revenue path. A commission usually earns less per
+   order than reselling the same item while needing no capital; say both numbers plainly
+   instead of selling the upside.
+4. A risk register with the control beside each risk, and name the items that need a
+   lawyer or accountant rather than code.
+5. Phases sized as spec-sized passes, each ending in a draft task file.
+6. Close with the 3-5 decisions that actually gate the build, in prose, after the
+   mechanism has been explained.
+
+The memo doc lives at the workspace root as `<PROJECT>-MODEL.md`. Specs it produces go to
+`.hermes/tasks/` as `status: draft` and stay `draft` until the confirm round; say in the
+handover that they are drafts awaiting a go-ahead, never buildable.
+
 ## 1. Research before asking
 
 Read the relevant code first. Find which files are involved, what patterns already exist, and what constraints apply. Never ask Flexx something the codebase can answer:
@@ -18,6 +46,8 @@ Read the relevant code first. Find which files are involved, what patterns alrea
 - Existing patterns (how are routes structured? how is auth handled?)
 - Technical constraints (framework version, language, dependencies)
 - What already exists that overlaps with this idea
+- Marketing-vs-code mismatches: claims on landing cards vs what the code actually gates (catch false advertising before it lands in the spec)
+- **Fast-moving external facts** (LLM model IDs and pricing, hosted-service tiers, API versions): verify live before they appear in any question or anchor. What Flexx already runs is ground truth: read his Hermes config (`config.yaml`, `providers:` block, keys redacted; `%LOCALAPPDATA%\hermes\config.yaml` on this box), then confirm the current model string and prices against the provider's live docs. Stale anchors from memory get called out as outdated and burn interview trust.
 
 If the idea touches a project like BotWall, pithos, or prxyauth, cd into that repo and read the relevant files silently. Only surface findings if they constrain a product decision.
 
@@ -30,12 +60,33 @@ If the idea touches a project like BotWall, pithos, or prxyauth, cd into that re
 
 If any discovery surface is hardcoded, add it to the relevant files list. A feature that works at its URL but does not appear on the homepage is incomplete.
 
+**Audit claims vs gates.** For features already advertised (landing page, pricing cards, help guide), diff the marketing copy against what the code actually gates. A feature sold on a cheaper tier but hard-locked higher is a product bug and a forced decision — surface it as an interview question and give it an AC; never file a ladder that leaves the claim false.
+
+**A second-phase spec starts from the shipped schema, not the old draft.** When Flexx says "spec phase 2" of something already built, re-read the live schema and every route the phase touches, then walk the existing draft AC by AC and list what it silently assumes exists. A draft written before the build names columns and queues the build never created (an order accept and dispatch flow whose `accepted_at` and `dispatched_at` were never added), and it misses hardening that shipped code makes obvious: session revocation, an audit table for edits and PII views, upload type sniffing, idempotent state transitions, and a moderation queue when approval work exists. Add a `## Data model additions` section stating ONE migration and naming the next journal number relative to the last applied one, plus a short `## Decisions locked` block so the build agent does not re-litigate auth, fulfilment ownership or money movement. Keep `status: draft` and `depends_on` the phase it extends.
+
+**Never write a reuse clause for code that does not exist yet.** Before an AC says "reuses the manual product form" or "the shared image uploader", grep for the file and the symbol. If it is absent, either describe the contract the AC actually needs or name the missing component as a dependency. A reuse clause aimed at a form that was never built reads fine in review of the diff (the new code does the work) and only surfaces in a spec audit after merge, which forces a spec amendment against an already-shipped branch.
+
 ## 2. Interview in rounds
 
-Ask 1-4 questions per round, each with concrete options. Every question gets your recommended answer listed first. Examples:
+Ask 1-4 questions per round, each with concrete options. Every question gets your recommended answer listed first. **Deliver the round through the `clarify` tool as pickable buttons** - that is the standing expectation ("send the questions as buttons"); never paste an option list into chat prose. One clarify call carries the whole round (up to 5 questions); the recommended option goes first (the UI marks it Recommended and auto-appends an Other row); he answers by tapping. Put concrete anchor values (prices, quotas, counts) inside the choices — FL3XX reacts to numbers far better than abstractions, and the auto-appended 'Other' lets him name his own. Examples:
 
 - "For the payment page, where should it live? I think /dashboard/billing makes sense since it maps to the existing route structure."
 - "Should failed payments redirect to a retry page or show a modal? Modal is cleaner but retry page lets them review their payment info."
+
+**Anchor number questions.** For anything numeric (prices, caps, quotas), never ask cold — offer 2-3 concrete anchor sets with the recommended one first and let him react or give his own. He edits an anchor or hybrids two options, so anchors beat open questions for numbers.
+
+**A clarify round can come back half answered.** The form closes on a timeout; he may tap the one decision he cares about and leave the rest. Resend ONLY the unanswered questions, state the already-answered ones as fixed in one line, and never restart the whole round or quietly fill the gaps with your recommended defaults. "Resend the questions" means exactly this, not that the round failed.
+
+**Never batch a dependent question with the question that decides whether it applies.** A clarify call renders every question at once, so a conditional follow-up still gets answered after the gate answer deleted its premise (a POD-scope and POD-fraud-control pair came back as "no pay on delivery" plus a picked fraud-control option). Ask the gate in its own round and fire the follow-ups only if it survives. When an answer rejects the premise instead of picking an option, treat it as a decision to cut the feature: discard the dependent answers, give the cut its own NG id, and say so in the draft ("POD is out, recorded as NG-1") rather than quietly keeping the feature under softer wording. Answer text often arrives voice-dictated and ungrammatical; read intent, and never quote his phrasing into an AC.
+
+**Agent features get a hardening block in the FIRST draft.** When the feature is an LLM agent (chat assistant, tool-calling bot), do not wait to be asked for security: include the injection-gating criteria up front — trust boundary + scope lock as non-editable code constants, a strict tool registry (no tool takes a user/tenant id; out-of-schema args refused at call time; unknown tool = hallucination error), tool results labeled as untrusted data, an iteration cap with a tools-disabled forced final, a server-side reply sanitizer, a canary marker, and a red-team battery as its own AC (run with the real model at acceptance). Flexx demanded exactly this the moment a draft landed without it; MineRich's `src/agent/` is the reference implementation to port.
+
+**Storefront specs order IN-APP, always.** For e-commerce specs the app is the
+only ordering surface: cart, checkout, payment provider. WhatsApp is a support
+channel only (contact page, footer, mobile menu) plus internal supplier-side
+order forwarding. Never write a WhatsApp-order CTA, a "complete it on WhatsApp"
+checkout fallback, or any buyer-facing route around the app for ordering; Flexx
+flags these immediately when they surface in the UI.
 
 Ask only genuine product decisions:
 
@@ -90,19 +141,17 @@ Rules for the draft:
 - Every acceptance criterion is an observable outcome. Every non-goal has a stable id.
 - AC-N and NG-N IDs are the contract that build/review skills enforce. Do not change them after filing.
 - No AC may require a non-goal. If one does, ask another round to resolve it.
-- Each issue is one day of agent work or less. Bigger ideas become a chain of small issues. Order them so each is buildable from merged code of the prior ones.
+- Each issue is one day of agent work or less. Bigger ideas become a chain of small issues. Order them so each is buildable from merged code of the prior ones. If Flexx explicitly chooses to keep a bigger scope in one spec, honor it and state the size in the draft instead of splitting against his wish.
+- When he asks to spec several items at once ("spec 1 to 3") and one of them exceeds a day, split that item into a second descriptive slug with `depends_on` pointing at the first, and state the split in one line in chat. Do not silently inflate one spec to cover it, and do not stop to ask permission for the split.
+- **A requirement added mid-batch gets its own slug and its own confirm.** When Flexx appends scope while other specs are still drafts ("before you proceed, also..."), research and interview the addition separately, file it as a new task, and show the new draft for a go-ahead. Never fold unreviewed scope into an already-confirmed spec, and never file it without the confirm round.
+- Copy every number the interview settled (prices, quotas, caps, counts) VERBATIM from the answer into the AC — never re-derive, round, or paraphrase a number. Drift between the interview and the draft file is invisible until the build; when it surfaces the build agent must ask and the file gets re-fixed anyway, so get it exact the first time.
 - The frontmatter is the task schema. `slug` must match the filename. `status` starts as `draft`. `depends_on` lists slugs of tasks that must be merged before this one can be built. Leave empty if no dependencies.
 
 ## 4. Confirm
 
-Show the draft in chat. Then use the `clarify` tool to get Flexx's decision:
+Show the draft in chat and get Flexx's go-ahead. Wait for confirmation before writing anything to disk.
 
-- question: "Spec draft ready. Mark as agent-ready for the build loop?"
-- choices: ["Mark Agent Ready", "Needs changes"]
-
-If "Needs changes": ask what to fix, revise, and re-present the clarify button. Loop until "Mark Agent Ready" or Flexx abandons.
-
-If "Mark Agent Ready": proceed to step 5.
+With the draft, list the few consequential defaults as explicit veto flags (what existing paid users get under new rules, price math, features whose advertised claim changes) — one line each. Flags he can veto now are cheaper than AC rewrites later.
 
 ## 5. Write to disk
 
@@ -112,27 +161,32 @@ For generic/non-project tasks, write to `~/.hermes/tasks/<slug>.md`.
 
 Also save as a TODO for the current session.
 
-## 6. Queue for build
-
-After writing the file, flip `status` from `draft` to `agent-ready` in the frontmatter (Flexx already confirmed via the button). Commit with message `ready: <slug>` and push.
-
-If the git post-commit hook is installed (see README), build fires automatically. If not, use the `clarify` tool:
-
-- question: "Task queued. Trigger build now?"
-- choices: ["Work Queue", "Done for now"]
-
-If "Work Queue": run the build agent via `hermes chat -q` with the build prompt (see flexx-build skill step 7).
-
-If "Done for now": end. Flexx can say "work the queue" later.
-
 ## Hard rules
 
-- Only flip to `agent-ready` after Flexx explicitly clicks the "Mark Agent Ready" button in the clarify call. Never auto-flip.
+- Never apply the "agent-ready" label. Only Flexx decides when something is ready for the build loop.
 - Never start building during the spec interview.
 - Never guess product decisions - ask.
 - Output the final spec in a copyable code block so Flexx can paste it into Linear/GitHub issues.
 
-## 6. Answering a blocked question
+## 6. Human gate: from draft to the build queue
+
+The label stays `draft` until Flexx says otherwise. The agent never self-promotes a spec, and
+never starts building during or after the interview.
+
+Once he has the draft in chat and approves it, offer the gate as a `clarify` call so he does
+not edit frontmatter by hand:
+
+- question: "Spec `<slug>` is written. Put it in the build queue?"
+- choices: ["Mark agent-ready", "Keep as draft", "Needs another round"]
+
+"Mark agent-ready" is Flexx deciding, not the agent: flip `status: draft` to `status: agent-ready`,
+commit `ready: <slug>`, and push. With the post-commit hook installed (see README) the build
+dispatcher fires on its own; without it, ask "Work the queue now?" and run the build one-shot
+from `flexx-build` step 7 only on a tap.
+
+"Keep as draft" ends the pass. "Needs another round" returns to step 2.
+
+## 7. Answering a blocked question
 
 When a task is `status: blocked` and Flexx answers the question in chat:
 
