@@ -63,6 +63,10 @@ if [ ! -f .hermes/loop.conf ]; then
 # Seconds before a dispatch lock with a dead pid is considered abandoned.
 FLEXX_LOOP_STALE=5400
 
+# Wall-clock cap for the dispatched build one-shot, in seconds. 0 = unbounded.
+# A hung child holds the single-flight lock and stalls the queue behind it.
+FLEXX_LOOP_BUDGET=7200
+
 # 1 = also build any other agent-ready task when a commit lands (queue drains itself).
 # 0 = only build the task whose status just flipped to agent-ready.
 FLEXX_LOOP_DRAIN=1

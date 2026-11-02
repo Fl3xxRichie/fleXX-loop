@@ -5,8 +5,10 @@
 #   bash scripts/install.sh --dry-run    # show the resolved paths and diffs only
 #   bash scripts/install.sh --check      # exit 1 if the installed copy differs from the repo
 #
-# Every replaced skill directory is backed up to <name>.bak-<timestamp>, because the
-# running copy is often newer than the repo: hand-edited lessons live there.
+# Every replaced skill directory is backed up before it is removed, because the running
+# copy is often newer than the repo: hand-edited lessons live there. Backups go to
+# <skills-root>/../skill-backups, NOT next to the skill: anything inside the skills root
+# is discovered as a skill, so a backup directory there shows up as a duplicate skill.
 
 set -euo pipefail
 
@@ -45,6 +47,8 @@ ROOT="$(resolve_root)" || {
 }
 
 TARGET="$ROOT/software-development"
+# Outside the skills root on purpose: Hermes treats every directory in there as a skill.
+BACKUPS="$(cd "$ROOT/.." && pwd)/skill-backups"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 VERSION="$(sed -n 's/^version:[[:space:]]*//p' "$REPO/skill-pack.yaml" | head -1)"
 
@@ -73,9 +77,10 @@ for src in "${SKILLS[@]}"; do
   fi
   mkdir -p "$TARGET"
   if [ -d "$dest" ]; then
-    cp -R "$dest" "$dest.bak-$STAMP"
+    mkdir -p "$BACKUPS"
+    cp -R "$dest" "$BACKUPS/$name-$STAMP"
     rm -rf "$dest"
-    echo "  ~ $name replaced (backup: $name.bak-$STAMP)"
+    echo "  ~ $name replaced (backup: $BACKUPS/$name-$STAMP)"
   else
     echo "  + $name installed"
   fi

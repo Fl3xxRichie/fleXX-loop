@@ -161,9 +161,17 @@ For generic/non-project tasks, write to `~/.hermes/tasks/<slug>.md`.
 
 Also save as a TODO for the current session.
 
+**Lint the file before showing it.** `python scripts/loop-lint.py .hermes/tasks` (from a repo that
+carries the loop tooling) enforces the shape above mechanically: slug equals the filename,
+sequential AC/NG ids, no AC referencing an NG, the five required sections, `status: draft` with
+no `claimed_at`. A spec that fails it is not buildable, and the failure is cheaper to read than
+to argue about in review. Exit 1 means contract errors, exit 2 means the linter could not run.
+
 ## Hard rules
 
-- Never apply the "agent-ready" label. Only Flexx decides when something is ready for the build loop.
+- Never apply the `agent-ready` label on your own initiative, and never as a way to move a draft
+  forward. It flips only at the section-6 gate, on his tap, or when he reactivates a blocked
+  task per section 7. The decision is his; the keystroke is yours only after it.
 - Never start building during the spec interview.
 - Never guess product decisions - ask.
 - Output the final spec in a copyable code block so Flexx can paste it into Linear/GitHub issues.

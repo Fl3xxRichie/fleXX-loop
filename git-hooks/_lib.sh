@@ -23,6 +23,7 @@ fxl_load_conf() {
   fi
   : "${FLEXX_LOOP_STALE:=5400}"     # seconds before a lock is considered dead
   : "${FLEXX_LOOP_DRAIN:=1}"        # pick any ready task, not only the one just committed
+  : "${FLEXX_LOOP_BUDGET:=7200}"    # wall-clock cap for the dispatched one-shot, 0 = unbounded
   : "${FLEXX_LOOP_PROVIDER:=}"
   : "${FLEXX_LOOP_MODEL:=}"
 }
@@ -40,6 +41,8 @@ fxl_hermes() {
   fi
   local candidate
   for candidate in \
+    "${LOCALAPPDATA:-}/hermes/hermes-agent/venv/Scripts/hermes" \
+    "$HOME/AppData/Local/hermes/hermes-agent/venv/Scripts/hermes" \
     "${LOCALAPPDATA:-}/hermes/bin/hermes.exe" \
     "$HOME/AppData/Local/hermes/bin/hermes.exe" \
     "$HOME/.local/bin/hermes"; do

@@ -106,8 +106,13 @@ Every decision lands in `$GIT_DIR/flexx-loop.log`. If nothing fires, read that f
 | `FLEXX_LOOP_PROVIDER` / `FLEXX_LOOP_MODEL` | pin the one-shot; an unpinned provider that is out of credit dies in seconds with no verdict |
 | `FLEXX_LOOP_TASKS` | tasks dir, default `.hermes/tasks` |
 | `FLEXX_LOOP_STALE` | seconds before a lock with a dead pid is reaped |
+| `FLEXX_LOOP_BUDGET` | wall-clock cap for the dispatched one-shot, default `7200`, `0` = unbounded. A hung child holds the lock and stalls the queue |
 
 Repo config lives in `.hermes/loop.conf` (written once by `setup-hooks.sh`, never overwritten).
+
+Backups from `install.sh` land in `<skills-root>/../skill-backups/`, never beside the skill:
+anything inside the skills root is discovered as a skill, and a `name.bak-<ts>` directory there
+shows up as a duplicate skill in the agent's skill list.
 
 ## Lint
 

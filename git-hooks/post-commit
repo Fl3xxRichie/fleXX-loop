@@ -119,6 +119,9 @@ PROMPT="Work the queue. Task '$SLUG' is agent-ready (committed $(date -u +%Y-%m-
 ARGS=(-q "$PROMPT" -Q)
 [ -n "${FLEXX_LOOP_PROVIDER}" ] && ARGS+=(--provider "$FLEXX_LOOP_PROVIDER")
 [ -n "${FLEXX_LOOP_MODEL}" ] && ARGS+=(-m "$FLEXX_LOOP_MODEL")
+# Unattended pass: cap wall-clock. A hung child holds the single-flight lock and stalls the
+# whole queue, since the lock is only reaped once its pid is dead.
+[ "${FLEXX_LOOP_BUDGET:-0}" -gt 0 ] && ARGS+=(--run-budget "$FLEXX_LOOP_BUDGET")
 
 fxl_log "post-commit: dispatching build for $SLUG via $HERMES_BIN"
 
