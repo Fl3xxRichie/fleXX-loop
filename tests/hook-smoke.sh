@@ -121,6 +121,7 @@ ELAPSED=$(( $(date +%s) - START ))
 check "commit does not block on the build (<15s)" '[ "$ELAPSED" -lt 15 ]' "took ${ELAPSED}s"
 for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$STUB_LOG" ] && break; sleep 0.5; done
 check "build dispatched" 'grep -q "demo" "$STUB_LOG"'
+check "invoked the chat subcommand" 'grep -q "^chat " "$STUB_LOG"' "$(head -1 "$STUB_LOG" 2>/dev/null)"
 check "child runs with the recursion guard set" 'grep -q "ACTIVE=1" "$STUB_LOG"'
 
 echo ""

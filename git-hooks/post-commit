@@ -116,7 +116,7 @@ if ! HERMES_BIN="$(fxl_hermes)"; then
 fi
 
 PROMPT="Work the queue. Task '$SLUG' is agent-ready (committed $(date -u +%Y-%m-%dT%H:%MZ)). Load the flexx-build skill, claim it, implement every AC, push the branch task/$SLUG, then fire review per step 7. One task per pass."
-ARGS=(-q "$PROMPT" -Q)
+ARGS=(chat -q "$PROMPT" -Q)
 [ -n "${FLEXX_LOOP_PROVIDER}" ] && ARGS+=(--provider "$FLEXX_LOOP_PROVIDER")
 [ -n "${FLEXX_LOOP_MODEL}" ] && ARGS+=(-m "$FLEXX_LOOP_MODEL")
 # Unattended pass: cap wall-clock. A hung child holds the single-flight lock and stalls the
